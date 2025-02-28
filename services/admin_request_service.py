@@ -34,29 +34,36 @@ async def create_access_token(username: str, expires_delta: timedelta = None):
 async def login_admin(admin: Admin):
     db_admin = await get_admin_by_username(admin.username)
     
+    # Validate user credentials
     if not db_admin or not await verify_password(admin.password, db_admin["password"]):
-        login_log = {
+        login_attempt = {
             "username": admin.username,
-            "login_time": datetime.utcnow(),
+            "timestamp": str(datetime.utcnow()),
             "status": "Failed"
         }
-        await login_logs_collection.insert_one(login_log)
+
+        # Store failed login attempt in Redis
+        redis_client.rpush("login_attempts", json.dumps(login_attempt))
+
+        # Log failed attempt in MongoDB
+        await login_logs_collection.insert_one(login_attempt)
+
         return {"error": "Invalid username or password"}
 
+    # Generate JWT Token
     access_token = await create_access_token(db_admin["username"])
 
-    redis_client.rpush("login_attempts", json.dumps({
+    login_attempt = {
         "username": admin.username,
         "timestamp": str(datetime.utcnow()),
         "status": "Success"
-    }))
-
-    login_log = {
-        "username": db_admin["username"],
-        "login_time": datetime.utcnow(),
-        "status": "Success"
     }
-    await login_logs_collection.insert_one(login_log)
+
+    # Store successful login in Redis
+    redis_client.rpush("login_attempts", json.dumps(login_attempt))
+
+    # Insert successful login in MongoDB
+    await login_logs_collection.insert_one(login_attempt)
 
     return {
         "message": "Login Successful",

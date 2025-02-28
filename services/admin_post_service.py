@@ -39,12 +39,19 @@ async def register_admin(admin: Admin):
     if existing_admin:
         return {"error": "Username already exists"}
 
+    # Get the latest admin_id and increment
+    latest_admin = await admin_collection.find_one(sort=[("admin_id", -1)])
+    new_admin_id = (latest_admin.get("admin_id", 0) + 1) if latest_admin else 1
+
     # Hash the password before storing
     hashed_pwd = await hash_password(admin.password)
+    
+    # Create new admin data
     new_admin = {
+        "admin_id": new_admin_id,
         "username": admin.username,
         "password": hashed_pwd,
-        "role": admin.role
+        "role": "admin"  # Automatically assign "admin" role
     }
 
     # Store the request in Redis (Queue system)
